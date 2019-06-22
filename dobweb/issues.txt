@@ -1,0 +1,10 @@
+1. Scroll position is not saved between edit/debug mode and between frames (noticable when caret is moved between frames).
+
+2. Execution is not uniform, a lot of jerks - WONTFIX
+   Tried setInterval, setTimeout, requestAnimationFrame - animation is still jerky.
+   All of the above 3 functions does not work when the browser tab is inactive, that is also not what I want.
+
+3. Editor displays multibyte UTF-8 chars as single entities, but DOBELA interpreter treats each byte separately,
+   so column alignment is incorrect if such chars present. The problem is in editor only, debugger displays alignment correctly
+   because each non-command non-dot byte is replaced with a space in debugger.
+   For the same reason selection containing such chars incorrectly displayed when switching between debugger and editor.

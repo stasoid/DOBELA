@@ -1,0 +1,17 @@
+There are two types of errors that step() can produce:
+
+1. Error in DOBELA program - invalid command sequence - eternal recursion
+   step() returns false, it can be distinguished from "terminated" state by calling getstate()
+   dobcon        show message and exit immediately
+   dobgui        show msgbox, exit after closing msgbox
+   dobweb        show error in execution status
+
+2. Error in DOBELA interpreter - assertion failure
+   It handled differently in these situations:
+                 freerun                                  under debugger
+   dobcon win    print message and exit immediately       break into debugger (__debugbreak())
+   dobcon linux  print message and exit immediately       print message and exit immediately
+   dobgui (win)  show msgbox, exit after closing msgbox   break into debugger (__debugbreak())
+   dobweb        show error in execution status           show error in execution status
+
+   Note that assert handling does not depend on build configuration (Debug/Release), always present.

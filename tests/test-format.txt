@@ -1,0 +1,15 @@
+initial state
+
+
+*******
+
+
+state after performing one step/cycle
+
+
+*******
+
+state after performing two steps (optional)
+
+
+Number of * doesn't matter.

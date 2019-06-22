@@ -1,0 +1,574 @@
+<!doctype html>
+<!-- some bits of code are taken from https://github.com/TryItOnline/tryitonline/blob/master/usr/share/tio.run/frontend.js -->
+
+<!-- General stuff -->
+<script>
+function $(selector, parent) { return (parent || document).querySelector(selector); }
+function $$(selector, parent) { return (parent || document).querySelectorAll(selector); }
+function iterate(iterable, monad) {
+	if (!iterable)
+		return;
+	for (var i = 0; i < iterable.length; i++)
+		monad(iterable[i]);
+}
+print = console.log
+error = console.error
+function assert(str) { if(!eval(str)) alert("Assertion failed in dobweb.htm: "+str); }
+</script>
+
+<!-- CodeMirror -->
+<link rel="stylesheet" href="codemirror-5.40.2/codemirror.css">
+<script src="codemirror-5.40.2/codemirror.js"></script>
+<script src="codemirror-5.40.2/rulers.js"></script>
+<style>
+.CodeMirror
+{
+	height:500px;
+	border:1px solid darkgray;
+	*font:19pt;
+	font:14pt Consolas;
+}
+.CodeMirror-focused {
+	outline: auto 5px -webkit-focus-ring-color;
+	outline-offset: 0;
+	*box-shadow: 0 0 5px rgba(81, 203, 238, 1);
+}
+.CodeMirror-cursor {
+	border-left: 2px solid black;
+	*border: none;
+	*box-shadow: 1px 0 0 #000; /* https://stackoverflow.com/a/18841365 */
+}
+.CodeMirror-overwrite .CodeMirror-cursor
+{
+	width: auto;
+	border: 1px solid black;
+}
+/* make line number gutter of different color in debug mode */
+#debug .CodeMirror-linenumbers {
+	background: silver;  #ddd;
+}
+#debug .CodeMirror-linenumber {
+	color:black;
+}
+#debug.CodeMirror {
+	background: #eee
+}
+.code-edge        { border-bottom: 1px solid blue; } /* bottom edge */
+.CodeMirror-ruler { border-left:   1px solid blue; #ccc; } /* right  edge */
+</style>
+
+<!-- HTML page styles -->
+<style>
+
+box{ width:80px; *background:silver; display: inline-block; }
+box#generators{ width:100px; }
+
+body {font-size: x-large}
+button,input {font-size: 13pt}
+
+#mode /* mode: edit or debug */
+{
+	text-transform: uppercase; 
+	font-weight: bold;
+	font: 14pt arial; 
+	*background:silver;
+	border:2px solid silver;
+	padding: 2px 4px ;
+
+	display: inline-block;
+	padding-bottom: 0px;
+	width: 80px;
+	text-align: center;
+}
+#state /* debug state: stopped,running,terminated,error */
+{
+	display: inline-block;
+	padding-bottom: 0px;
+	width: 120px;
+}
+#caretpos
+{
+	display: inline-block;
+	padding-bottom: 0px;
+	width: 100px;
+}
+#error{ color: red }
+
+.debug{}/* elements with this class are visible only in debug mode */
+
+input,textarea {
+	font:14pt Consolas;
+	*border:1px solid black;
+	border-width:1px;
+}
+input[readonly], textarea[readonly] {
+	background: #eee; #ccc;
+}
+textarea#input, textarea#fifo, textarea#output
+{
+	vertical-align: top;
+	height: 1.2em;
+	min-height: 1.2em;
+}
+</style>
+
+<!----------------------------------------------------------------------------------------------------------------------------------------------------------->
+<!----------------------------------------------------------------------------------------------------------------------------------------------------------->
+<!--                                                                  HTML page                                                                            -->
+<!----------------------------------------------------------------------------------------------------------------------------------------------------------->
+<!----------------------------------------------------------------------------------------------------------------------------------------------------------->
+<body>
+<noscript>This page requires JavaScript to work properly.</noscript>
+
+<textarea id="mainview"></textarea>
+
+<div style="margin-top:4px">
+  <span id="mode" title="mode"></span> 
+  <span id="state" class="debug" title="execution state"></span>
+  <span id="caretpos" title="line:col 1+"></span>
+  <span id="error" class="debug"></span>
+</div>
+
+<div style="margin-top:3px">
+  Frame:  <box id="frame" class="debug"></box>
+  Dots:   <box id="dots" class="debug"></box>
+  Generators | active: <box id="generators" class="debug"></box>
+  Inputs: <box id="inputs" class="debug"></box>
+</div>
+
+<div style="margin-top:5px">
+  Input:  <textarea id="input"></textarea> &nbsp;
+  FIFO:   <textarea id="fifo" readonly></textarea> &nbsp;
+  Output: <textarea id="output" readonly></textarea>
+</div>
+
+<hr style="margin-bottom:0">
+
+<div style="margin-top:5px">
+  <button title="Run program (F5)" id="run-btn" onclick="cmdrun()">run</button>&nbsp;
+  <button title="Do one step (F10)" id="step-btn" onclick="cmdstep()">step</button>&nbsp;
+  <button title="Switch to editor (ESC)" id="edit-btn" onclick="cmdedit()">edit</button>&nbsp;
+  <span style="font-size: 13pt"><i>Stop running: F5/F10/ESC. This page uses F5 to run the program. Use Shift+F5 or Ctrl+R to reload the page.</i></span>&nbsp;
+  <button title="Copy permalink to URL bar and clipboard" id="permalink-btn" onclick="cmdpermalink()">permalink</button>&nbsp;
+</div>
+
+</body>
+<!----------------------------------------------------------------------------------------------------------------------------------------------------------->
+<!----------------------------------------------------------------------------------------------------------------------------------------------------------->
+<!----------------------------------------------------------------------------------------------------------------------------------------------------------->
+
+
+<!-- CodeMirror initialization -->
+<script>
+/*
+   Create editor and debugger.
+   Editor and debugger are two separate CodeMirror instances. Debugger is readonly.
+*/
+var cfg = {
+    lineNumbers: true, 
+    cursorBlinkRate: 0,
+	tabSize: 1,
+	extraKeys: {
+		'Alt-Backspace': 'undo', 
+		'Tab': function(){}, // do nothing, handled in OnKeyDown
+		//'Esc': function(cm){cm.setCursor(cm.getCursor())}, // remove selection - handled in OnKeyDown
+	},
+}
+var editor = CodeMirror.fromTextArea($("#mainview"), cfg);
+// further instead of editor.getWrapperElement() we can write $('#editor')
+editor.getWrapperElement().id = "editor"
+
+cfg.readOnly = true
+var debug = CodeMirror.fromTextArea($("#mainview"), cfg);
+debug.getWrapperElement().id = "debug"
+$('#debug').style.display = "none" // prevent flash of lines gutter during first page load
+
+function CalcWidth(cm)
+{
+	var width = 0;
+	for(var i = cm.firstLine(); i <= cm.lastLine(); i++)
+	{
+		if (width < cm.getLine(i).length)
+			width = cm.getLine(i).length;
+	}
+	return width
+}
+// note: very ineffective, recalculculates max line width on every change
+function ShowRightEdge(cm,_)
+{
+	cm.setOption("rulers", [CalcWidth(cm)])
+	//cm.setOption("rulers", [{column:CalcWidth(cm), className:"code-edge"}])
+}
+editor.on("change", ShowRightEdge)
+debug.on("change", ShowRightEdge)
+
+/* When caret is on the last line and that line is empty and user presses Del button "beforeChange" is fired, but not "change",
+   so I save previous last line in cm.last_line and do all the work in "change" event.
+   "wrap" does not work for gutters for some reason, so need to use "background" and "gutter" */
+function ShowBottomEdge(cm,_)
+{
+	if(cm.last_line == undefined) {
+		cm.addLineClass(cm.lastLine(),"background","code-edge");
+		cm.addLineClass(cm.lastLine(),"gutter","code-edge");
+		cm.last_line = cm.lastLine()
+	}
+	else if(cm.last_line != cm.lastLine()) {
+		cm.removeLineClass(cm.last_line,"background");
+		cm.removeLineClass(cm.last_line,"gutter");
+		cm.addLineClass(cm.lastLine(),"background","code-edge");
+		cm.addLineClass(cm.lastLine(),"gutter","code-edge");
+		cm.last_line = cm.lastLine()
+	}
+}
+editor.on("change", ShowBottomEdge)
+debug.on("change", ShowBottomEdge)
+
+function ShowCaretPos(cm)
+{
+	var pos = cm.getCursor()
+	var line=pos.line+1, col=pos.ch+1
+	$('#caretpos').innerText = line+":"+col;
+}
+editor.on("cursorActivity", ShowCaretPos)
+debug.on("cursorActivity", ShowCaretPos)
+
+// prevent Up/Down keys to move caret horizontally
+// it happens when user presses Up key while standing on the first line or
+// Down key while standing on the last line
+function FixUpDownKeys(cm,e)
+{
+	var cursor = cm.getCursor();
+	if((e.keyCode == 38 && cursor.line == 0) || (e.keyCode == 40 && cursor.line == cm.lastLine()))
+	{
+		e.preventDefault()
+	}
+}
+editor.on("keydown", FixUpDownKeys)
+debug.on("keydown", FixUpDownKeys)
+
+//var hi = ",..,.,,.,..,.,,,$^\n.                 #"
+//editor.setValue(hi)
+//editor.clearHistory() // clear undo history
+
+</script>
+
+<!-- DOBELA interpreter -->
+<script src="dobweb.js"></script>
+
+<!-- DOBELA interpreter modes/states -->
+<script>
+
+var mode; // "edit" or "debug"
+var state; // debug state: "stopped" or "running" or "terminated" or "error"
+var saved_input = "" // to restore contents of input field when switching back to edit mode
+
+function mainview()
+{
+	return mode=="edit" ? editor : debug
+}
+
+function ShowDebugState(arr_state, mainviewSelections)
+{
+	$('#state').innerText = state
+
+	//assert('arr_state[0] == "normal"')
+	var frame = arr_state[13]
+
+	// when entire contents is replaced style of last line is deleted, 
+	// if last_line is undefined the style will be restored in "change" event triggered by setValue
+	debug.last_line = undefined
+	debug.setValue(frame)
+	// restore caret position and selection
+	debug.setSelections(mainviewSelections)
+
+	$('#frame').innerText = arr_state[12];
+	$('#dots').innerText = arr_state[7];
+	$('#generators').innerText = arr_state[8]+' | '+arr_state[9];
+	$('#inputs').innerText = arr_state[10];
+
+	$('#fifo').value = arr_state[14];
+	var input_eof = arr_state[11]
+	if(input_eof == "1")
+	{
+		assert("$('#input').value == ''");
+		$('#input').value = '<eof>'
+	}
+}
+
+/*
+  SwitchMode - switch between editor and debugger
+  Called in these situations:
+  1. During initial page display: SwitchMode("edit")
+  2. When user presses "step" or "run" button and current mode is "edit": SwitchMode("debug")
+  3. When user presses "edit" button: SwitchMode("edit")
+*/
+// When switching between edit/debug modes one CodeMirror is hidden with display: none, the other is shown.
+// return true if actual switching occurred (mode was changed), false otherwise
+function SwitchMode(newmode)
+{
+	if(newmode == mode) {
+		mainview().focus()
+		return false
+	}
+	if(newmode == "edit")
+	{
+		$('#editor').style.display = "block"
+		$('#debug').style.display = "none"
+		//$('#edit-btn').disabled = true
+		iterate($$('.debug'), e => e.style.visibility = "hidden")
+		state = ""
+		$('#state').innerText = ""
+		$('#error').innerText = ""
+		$('#input').readOnly = false
+		$('#input').value = saved_input
+		$('#fifo').value = ""
+		$('#output').value = ""
+		// when switching from debug mode set caret in editor as in debugger
+		// harmless if debugger is empty (first call of SwitchMode) or if caret in debugger is in position not available in editor
+		var sels = debug.listSelections()
+		editor.setSelections(sels)
+		editor.toggleOverwrite(debug.state.overwrite)
+	}
+	else // "debug"
+	{
+		$('#editor').style.display = "none"
+		$('#debug').style.display = "block"
+		//$('#edit-btn').disabled = false
+		$('#input').readOnly = true
+		saved_input = $('#input').value
+		state = "stopped"
+
+		try{
+			if(!loadcode(editor.getValue()))  // currently loadcode always succeeds
+			{
+				state = "error"
+				$('#error').innerText = getstate().split('\f')[1]
+			}
+		}
+		catch(msg) { // assertion failure in interpreter.c
+			state = "error"
+			$('#error').innerText = msg
+		}
+		iterate($$('.debug'), e => e.style.visibility = "visible")
+
+		var arr_state = getstate().split('\f')
+
+		ShowDebugState(arr_state, editor.listSelections())
+	
+		debug.toggleOverwrite(editor.state.overwrite)
+	}
+	mode = newmode
+	$('#mode').innerText = mode
+	$('#mode').style.background = mode=="debug"?"silver":"white"
+	mainview().focus()
+	return true
+}
+
+SwitchMode("edit")
+
+</script>
+
+<!-- DOBELA interpreter main functions -->
+<script>
+
+loadcode = Module.cwrap('loadcode', 'number', ['string'])
+step     = Module.cwrap('step', 'number', [])
+getstate = Module.cwrap('getstate', 'string', [])
+
+//callbacks
+function output_callback(str) { $('#output').value += str }
+function input_getchar_callback() 
+{ 
+	var str = $('#input').value;
+	if (str == "") return -1; // EOF
+	var ret = str.charCodeAt(0);
+	$('#input').value = str.substring(1);
+	return ret;
+}
+/* 
+   Main interpreter functions: run/step/stop/edit 
+*/
+// note: dobweb.js already has function run
+function cmdrun()
+{
+	if(state == "running")
+	{
+		stop()
+		return
+	}
+	if(mode == "edit") SwitchMode("debug")
+
+	if(state != "stopped") return
+
+	//requestAnimationFrame = setTimeout // requestAnimationFrame can be replaced with setTimeout, no other adjustments needed
+
+	function run_step()
+	{
+		_step();
+		if(state == "running")
+			requestAnimationFrame(run_step) // https://idiallo.com/javascript/smooth-animation
+	};
+	state = "running"
+	run_step()
+	mainview().focus()
+}
+function stop()
+{
+	// After state was changed to "stopped" run_step will execute _step one last time, it seem to not cause any problems.
+	// Doing so slightly simplifies code - no need for timeoutID/requestID and clearTimeout/cancelAnimationFrame.
+	if(state == "running")
+		state = "stopped"
+}
+function cmdstep()
+{
+	// don't do step if we've just switched from edit mode
+	if(mode == "edit")
+	{
+		SwitchMode("debug")
+		return
+	}
+	// don't do step if we've just switched from running state
+	if(state == "running")
+	{
+		stop()
+		return
+	}
+	/*if(state == "terminated")
+	{
+		SwitchMode("edit")
+		return
+	}*/
+	// if state == "error" or "terminated" do nothing
+	if(state != "stopped")
+		return
+
+	_step()
+
+	mainview().focus()
+}
+// called by cmdstep/cmdrun
+function _step()
+{
+	try{
+		step()
+	}
+	catch(msg) { // assertion failure in interpreter.c
+		state = "error"
+		$('#error').innerText = msg
+	}
+	var arr_state = getstate().split('\f')
+	if(state != "error") // no assertion failure
+	{
+		// arr_state[0] == "normal" or "error" or "terminated"
+		if(arr_state[0] != "normal") state = arr_state[0]
+		if(state == "error") // error in command chain
+		{
+			$('#error').innerText = arr_state[1] // [1] is errortext
+			debug.setCursor( { ch: +arr_state[2], line: +arr_state[3] } ); // [2] [3] are err_x err_y
+		}
+	}
+
+	ShowDebugState(arr_state, debug.listSelections())
+}
+
+function cmdedit()
+{
+	stop()
+	SwitchMode("edit")
+}
+
+/* 
+   Keyborad 
+*/
+
+const F5 = 111+5, F10 = 111+10, ESC = 27, TAB = 9
+
+function modifiers(event) {
+	return event.altKey << 3 | event.ctrlKey << 2 | event.metaKey << 1 | event.shiftKey;
+}
+function OnKeyDown(event)
+{
+	if (modifiers(event) == 0 && event.keyCode == TAB)
+	{
+		event.preventDefault();
+		if(mode == "debug") {
+			debug.focus()
+		}
+		else {
+			if(editor.hasFocus()) $('#input').focus();
+			else editor.focus();
+		}
+	}
+	if (modifiers(event) == 0 && event.keyCode == ESC)
+	{
+		event.preventDefault();
+		if(state == "running") {
+			stop()
+			mainview().focus()
+		}
+		else if(!mainview().hasFocus()) {
+			mainview().focus()
+		}
+		else if(mainview().somethingSelected()) {
+			mainview().setCursor(mainview().getCursor()) // remove selection
+		}
+		else {
+			cmdedit()
+		}
+	}
+	else if (modifiers(event) == 0 && event.keyCode == F10)
+	{
+		event.preventDefault();
+		cmdstep()
+	}
+	else if (modifiers(event) == 0 && event.keyCode == F5)
+	{
+		event.preventDefault();
+		cmdrun()
+	}
+}
+addEventListener("keydown", OnKeyDown);
+
+// make buttons unfocusable, so they don't steal focus from main view
+//iterate($$('button'), function(el){el.addEventListener("mousedown", function(e){e.preventDefault()})});
+iterate($$('button'), elt=>elt.addEventListener("mousedown", evt=>evt.preventDefault()));
+
+</script>
+
+<script>
+// https://blah-blah/dobweb.htm?code=...&input=...
+
+let urlParams = new URLSearchParams(location.search);
+let code = urlParams.get('code');
+if(code != null)
+{
+	editor.setValue(code)
+	editor.clearHistory() // clear undo history
+}
+let input = urlParams.get('input');
+if(input != null)
+	$('#input').value = input
+
+function cmdpermalink()
+{
+	let code = editor.getValue();
+	let input = $('#input').value;
+	let url = location.pathname;
+	if(code != "" || input != "")
+	{
+		url += "?"
+		if(code != "") url += "code=" + encodeURIComponent(code)
+		if(input != "") {
+			if(code != "") url += "&"
+			url += "input=" + encodeURIComponent(input);
+		}
+	}
+	// if pushState is used then popstate event need to be handled for back/forward browser buttons to work properly
+	history.replaceState(null, null, url);
+	navigator.clipboard.writeText(location.href);
+	$('#permalink-btn').innerText = "permalink (copied)"
+	setTimeout(function(){ $('#permalink-btn').innerText = "permalink" }, 500);
+}
+</script>
+
+

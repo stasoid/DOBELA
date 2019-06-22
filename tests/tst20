@@ -1,0 +1,4 @@
+variant of tst16 - right-moving dot collides with a standing dot that has 'correct' direction (right)
+  #
+., |
+   .#

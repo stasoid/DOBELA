@@ -1,0 +1,18 @@
+First attempt at creating interp was buried under mass of edge cases.
+So for this version I reconsidered priorities:
+intuitive behavior of edge cases (multicollisions and cmd chains) considered less important than simplicity of spec/interpreter.
+
+I consider simplicity and robustness more important on the issue about rule 3.1.1 - decision about rule 3.1.1.
+Using long cmd chains is not recommended, should be avoided.
+Following original spec leads to considerable interp complication with very little gain.
+
+There are a lot of edge cases. I need a simple algorithm. Don't care if some multiple collisions give counterintuitive result.
+Simplicity of algorithm is more important. Using multiple dot collisions in programs is not recommended, should be avoided.
+
+Algorithm:
+
+1. Move all dots. Some of them will end up on each other or on some commands.
+
+2. Execute all commands in reading order. Purpose of this step is to get rid of all dots that are on commands.
+
+3. Handle dot-dot collisions in reading order.

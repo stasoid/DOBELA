@@ -1,0 +1,1 @@
+@dobgui\dobgui.exe -i nul %1

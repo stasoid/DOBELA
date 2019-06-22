@@ -1,0 +1,128 @@
+﻿Differencies from spec v13 at esolangs (https://esolangs.org/wiki/DOBELA) are marked with *, also:
+/d/ - suggested by deewiant
+/s/ - added by me (stasoid)
+
+§ 1. Basic rules.
+
+1.1     ,  A zero dot, comma.
+1.2     .  A one dot, period.
+
+1.3     #  A wall. Dots turn on contact: 
+
+1.3.1   Zeros(commas) turn 90 degrees clockwise, 
+1.3.2   Ones(periods) turn 90 degrees counter-clockwise.
+
+1.3.3*  Dot reflects from several walls simultaneously. /d/
+
+1.4     |  By default, if struck from the left or right, behaves like a #. 
+        If struck from above or below, it changes modes: if the last above/below collision was from below, dots colliding from left or right turn up, 
+        and vice versa. The dots that collide from above or below are destroyed.
+
+1.5     =  On contact, a Zero dot becomes a One dot, and vice versa. The flipped dot jumps over the =. For example, .= turns into =, (if the One was moving right).
+
+1.6     :  A generator. If its emission setting is enabled, emits a dot according to its setting right every other cycle.
+
+1.6.1   If struck from above, its emission setting is toggled. If struck from below, its dot type is toggled: Zeroes to Ones and vice versa.
+
+1.6.2*  Order of actions 1.6 vs 1.6.1 is determined by rule 3.1: if struck from above dot type is toggled *before* dot is generated in that cycle,
+        if struck from below it emission setting is toggled *after* dot is generated (or not generated) in that cycle. /d/
+
+1.6.3   By default, the emission setting is enabled and it outputs Ones.
+
+1.6.4   Colliding dots are destroyed.
+
+1.7     +  A fork instruction: any colliding dot is duplicated at the sides perpendicular to its direction, and is then destroyed. 
+        The forked dots directions are away from the fork. For example, the dot moving right or left creates two dots moving up and down.
+
+1.8     _  Provides access to the standard input stream (stdin). Each incoming octet is transformed into binary, and corresponding Zero and One dots 
+        are emitted down, least significant bit first.
+        
+        If there is a single _ in the program, it emits a dot every two cycles, starting from the first. 
+        
+        If there is more than one, a dot is emitted every cycle, but only one _ emits one. 
+        The northwesternmost _ emits a dot on the first cycle; on the second cycle, the next one (first columnwise, then linewise); and so on, until 
+        the last _ has emitted a dot. On the following cycle, the northwesternmost _ is the one to emit again.
+
+        Any colliding dots are destroyed.
+
+        Input is blocking. If program has one or more _ and there is no data in stdin and there is no EOF program waits until more data arrives,
+        dots are not moving. /d/
+
+        Console input is buffered. Interpreter uses C getchar(), so when inputting from console Enter needs to be pressed and input will contain 0xA (\n) byte. /s/
+        Note: low-level read() which dobelx64 uses behaves the same (on Windows; todo: check on Linux). /s/
+        Note: getch() doesn't return when <nul. /s/
+
+1.9     $  Colliding dots have their bit value (Zero or One) enqueued into the global FIFO and are destroyed.
+
+1.10    ^  If struck from
+           left:  All generators have their emission setting toggled (on/off).
+           right: All generators have their dot type toggled (One/Zero).
+           above: The global FIFO is emptied.
+           below: The global FIFO is output to the standard output stream (in FIFO order) and then cleared.
+
+        Output is done at the binary level, like input. The bits in the FIFO are collected into octets and output as such. 
+        If there are not enough bits to fill an octet, the remaining space is zero-filled with the bits in the FIFO taking up the least significant bits. 
+        For instance, if $ was struck with first a Zero and then two Ones, the octet 00000110 is output.
+
+        Colliding dots are destroyed.
+
+1.11    v  If struck from
+           left:  A dot is dequeued from the FIFO and emitted right.
+           right: A dot is dequeued from the FIFO and emitted left.
+           above: A dot is dequeued from the FIFO and emitted down.
+           below: A dot is dequeued from the FIFO and discarded.
+
+        Colliding dots are destroyed.
+
+
+§ 2. Dot-dot collision rules.
+
+2.1  If two dots of different types moving in opposite directions collide, they are both destroyed.
+
+2.2  If two dots of the same type moving in opposite directions collide such that they enter the same space, 
+     they are destroyed and a wall is created in that space.
+
+2.3  If a Zero and a Zero moving in opposite directions collide such that they pass over each other, 
+     they are destroyed and a wall is created where the northwesternmost dot was.
+
+2.4  If a One and a One moving in opposite directions collide such that they pass over each other, 
+     they are destroyed and a wall is created where the southeasternmost dot was.
+
+2.5  If two dots that are not moving in opposite directions collide, the southeasternmost dot is blocked from moving, but neither is destroyed.
+
+2.5.1*  If southeasternmost dot is emitted by a command then it is abnormal collision. In other words: if place where command is about to emit a dot is taken
+        by another dot of higher priority moving in perpendicular direction then it is abnormal collision. /s/
+        (this is different from what deewiant proposed)
+
+2.6  If a dot moves onto a dot which then finds that it cannot move that cycle, both dots are destroyed and a wall is put in their place.
+     This is abnormal collision.
+
+2.7* (Definition) Abnormal collision - collision of dots under some rare circumstances (see 2.5.1 and 2.6). Result of this collision is always #, regardless of types
+     of colliding dots. /s/
+
+
+§ 3. Additional rules.
+
+3.1*  Conceptually, every dot moves simultaneously in a cycle. After the dots have moved, collisions are handled and commands are executed in order, 
+      from the northwesternmost to the next, first columnwise and then linewise. Multiple dot collisions are also resolved in that order.
+
+3.1.1*  Change of semantics: 1. move all dots 2. execute all commands 3. handle all dot-dot collisions. Ie. all dot-dot collisions are handled after all commands (including #). /s/
+       Otherwise it is unclear what exact order is - command may create dot on a row that is already handled for dot-dot collisions.
+       - Actually, the order can be established, but it is hard to track all the newly created dots, see tests\exec-order-test /s/
+
+3.2  Dots, by default, move one space to the east.
+
+3.3  If dots venture outside the bounds of the initial source file, they are destroyed.
+
+3.4  The program ends when there are no more dots moving and no more dots will be emitted from any _, i.e. standard input has reached EOF.
+
+3.5* <empty> (removed rule restricting the size of the program to at least two lines and one column) /s/
+
+3.6  Non-command characters in the initial source file are ignored: they do not exist, as far as the program is concerned.
+
+3.7  If a dot would be created on top of a # or |, it is destroyed instead. 
+
+3.7.1  There is one exception to this: for =, the dot instead reverses direction and ends up on the other side of the =. 
+       For instance, .=# with the One moving right turns into ,=# with the Zero now moving left.
+
+3.7.2*  Note: r.=| turns to l,=| regardless of state of |. /s/

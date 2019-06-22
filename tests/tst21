@@ -1,0 +1,7 @@
+variant of tst19 - left-moving dot collides with a standing dot that has 'incorrect' direction (up)
+(it is 'incorrect' because under normal conditions this situation cannot happen because left-moving dot has priority, so the up-moving dot has to wait)
+it triggers different code path than tst19 because of lrtb order of processing dots
+ #   
+|   ,#
+ + +#
+.# .#

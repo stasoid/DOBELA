@@ -1,0 +1,24 @@
+Unfinished: how to create problems?
+      +=======+ 
+     .$       .u
+     1        2    this executes intuitively - first 1 hits $, then 2
+
+
+      +=======+ 
+     . .l     .u
+     1 2      3    this executes not as expected - a dot will pass between 1 and 2 on the next cycle
+                   or may be it can be considered expected?
+
+               but... should it really be different from:
+
+      +=======.l
+     . .l     3 
+     1 2        
+
+
+
+             +++
+              =
+              =
+          +===+.l  creates a lot of dots behind, they should be handled if we mix commands and collisions
+              .u

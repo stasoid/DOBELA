@@ -1,0 +1,2 @@
+tst15/16 - standing dot (eternal recursion)
+tst8/9/10 - dot pass over collisions
