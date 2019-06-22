@@ -1,6 +1,6 @@
 ﻿Differencies from spec v13 at esolangs (https://esolangs.org/wiki/DOBELA) are marked with *, also:
 /d/ - suggested by deewiant
-/s/ - added by me (stasoid)
+/s/ - added or changed by me (stasoid)
 
 § 1. Basic rules.
 
