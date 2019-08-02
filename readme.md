@@ -8,7 +8,7 @@ tester and dobgui are currently unsupported, may not work or even compile.
  - dobcon - console app, should work on Windows and Linux.
          dobcon is able to run [polyglot](https://codegolf.stackexchange.com/a/178900) in acceptable time
  - dobweb - online app at [stasoid.gihub.io/dobela](https://stasoid.github.io/dobela), transpiled to js with Emscripten.
-         dobweb works good only for small programs, it runs [polyglot](https://codegolf.stackexchange.com/a/178900) very slowly
+         dobweb works well only for small programs, it runs [polyglot](https://codegolf.stackexchange.com/a/178900) very slowly
 
 [DOBELA spec](spec.txt) - unfinished, based on [spec v13 at esolongs](https://esolangs.org/wiki/DOBELA).
 
